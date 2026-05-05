@@ -9,11 +9,15 @@
     "frontend"
   ],
   "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "db:generate": "npm run db:generate -w backend",
     "db:migrate": "npm run db:migrate -w backend",
     "db:seed": "npm run db:seed -w backend",
     "db:push": "npm run db:push -w backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
