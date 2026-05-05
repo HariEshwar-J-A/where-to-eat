@@ -43,7 +43,7 @@ function App() {
       </AppBar>
       <Container maxWidth="md" sx={{ py: 3 }}>
         {tab === "spinner" && (
-          <Spinner onSavedToLedger={refreshHistory} onOpenHistory={() => setTab("history")} />
+          <Spinner onSavedToLedger={refreshHistory} onOpenHistory={() => setTab("history")} onOpenManage={() => setTab("manage")} />
         )}
         {tab === "history" && <HistoryLedger refreshKey={historyRefresh} />}
         {tab === "manage" && <RestaurantManager open={true} onClose={() => setTab("spinner")} />}

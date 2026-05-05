@@ -17,6 +17,7 @@ const LONG_LABEL_PREVIEW =
 type Props = {
   onSavedToLedger: () => void;
   onOpenHistory: () => void;
+  onOpenManage: () => void;
 };
 
 function easeOutCubic(t: number): number {
@@ -344,6 +345,9 @@ export function Spinner({ onSavedToLedger, onOpenHistory }: Props) {
             </Button>
             <Button variant="outlined" onClick={() => void load()} disabled={spinning}>
               Reload options
+            </Button>
+            <Button variant="text" onClick={onOpenManage}>
+              Manage restaurants
             </Button>
             <Button variant="text" onClick={onOpenHistory}>
               View ledger
