@@ -84,7 +84,7 @@ async function pickWithAi(all: Restaurant[]): Promise<number[]> {
 
 /**
  * GET /api/spinner-options
- * Returns 8 restaurants spaced so same cuisine rarely sits adjacent (when feasible).
+ * Returns all restaurants spaced so same cuisine rarely sits adjacent (when feasible).
  */
 spinnerRouter.get("/spinner-options", async (_req, res) => {
   try {
@@ -94,35 +94,73 @@ spinnerRouter.get("/spinner-options", async (_req, res) => {
       return res.json({ restaurants: [] });
     }
 
-    if (all.length <= 8) {
-      const spaced = spaceByCuisine(all);
-      return res.json({ restaurants: spaced });
-    }
-
-    let chosen: Restaurant[];
-
-    try {
-      if (ai && process.env.OPENROUTER_API_KEY) {
-        const idsFromAi = await pickWithAi(all);
-        const map = new Map(all.map((r) => [r.id, r]));
-        const hydrated = idsFromAi
-          .map((id) => map.get(id))
-          .filter((r): r is Restaurant => r != null);
-        chosen = normalizeToEight(all, hydrated);
-        if (chosen.length < 8) {
-          chosen = fallbackEight(all);
-        }
-      } else {
-        chosen = fallbackEight(all);
-      }
-    } catch {
-      chosen = fallbackEight(all);
-    }
-
-    const spaced = spaceByCuisine(chosen);
+    const spaced = spaceByCuisine(all);
     return res.json({ restaurants: spaced });
   } catch (e) {
     console.error("spinner-options", e);
     return res.status(500).json({ error: "Failed to load spinner options" });
+  }
+});
+
+// GET /api/restaurants - List all restaurants
+spinnerRouter.get("/restaurants", async (_req, res) => {
+  try {
+    const restaurants = await prisma.restaurant.findMany({
+      orderBy: { name: "asc" },
+    });
+    res.json({ restaurants });
+  } catch (e) {
+    console.error("get restaurants", e);
+    res.status(500).json({ error: "Failed to load restaurants" });
+  }
+});
+
+// POST /api/restaurants - Add a new restaurant
+spinnerRouter.post("/restaurants", async (req, res) => {
+  try {
+    const { name, cuisine } = req.body;
+    if (!name || !cuisine) {
+      return res.status(400).json({ error: "Name and cuisine are required" });
+    }
+    const restaurant = await prisma.restaurant.create({
+      data: { name, cuisine },
+    });
+    res.json({ restaurant });
+  } catch (e) {
+    console.error("create restaurant", e);
+    res.status(500).json({ error: "Failed to create restaurant" });
+  }
+});
+
+// PUT /api/restaurants/:id - Update a restaurant
+spinnerRouter.put("/restaurants/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, cuisine } = req.body;
+    if (!name || !cuisine) {
+      return res.status(400).json({ error: "Name and cuisine are required" });
+    }
+    const restaurant = await prisma.restaurant.update({
+      where: { id },
+      data: { name, cuisine },
+    });
+    res.json({ restaurant });
+  } catch (e) {
+    console.error("update restaurant", e);
+    res.status(500).json({ error: "Failed to update restaurant" });
+  }
+});
+
+// DELETE /api/restaurants/:id - Delete a restaurant
+spinnerRouter.delete("/restaurants/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await prisma.restaurant.delete({
+      where: { id },
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error("delete restaurant", e);
+    res.status(500).json({ error: "Failed to delete restaurant" });
   }
 });
