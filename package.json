@@ -1,0 +1,19 @@
+{
+  "name": "fair-share-roulette",
+  "private": true,
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "db:generate": "npm run db:generate -w backend",
+    "db:migrate": "npm run db:migrate -w backend",
+    "db:seed": "npm run db:seed -w backend",
+    "db:push": "npm run db:push -w backend"
+  }
+}

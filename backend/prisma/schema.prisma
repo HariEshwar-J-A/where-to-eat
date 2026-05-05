@@ -1,0 +1,36 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Restaurant {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique
+  cuisine     String
+  lastVisited DateTime?
+  visits      VisitHistory[]
+  createdAt   DateTime       @default(now())
+}
+
+model VisitHistory {
+  id             Int        @id @default(autoincrement())
+  restaurantId   Int
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id])
+  date           DateTime   @default(now())
+  totalAmount    Decimal
+  receiptFileUrl String?
+  splits         BillSplit[]
+}
+
+model BillSplit {
+  id         Int          @id @default(autoincrement())
+  visitId    Int
+  visit      VisitHistory @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  personName String
+  amountOwed Decimal
+  paid       Boolean      @default(false)
+}
