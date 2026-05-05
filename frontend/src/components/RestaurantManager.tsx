@@ -55,12 +55,6 @@ export function RestaurantManager({ open, onClose }: Props) {
     if (open) loadRestaurants();
   }, [open, loadRestaurants]);
 
-  const handleAdd = () => {
-    setEditing(null);
-    setName("");
-    setCuisine("");
-  };
-
   const handleEdit = (restaurant: Restaurant) => {
     setEditing(restaurant);
     setName(restaurant.name);

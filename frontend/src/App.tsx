@@ -7,12 +7,11 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import { Restaurant as RestaurantIcon, History as HistoryIcon, Settings as SettingsIcon } from "@mui/icons-material";
+import { Restaurant as RestaurantIcon, History as HistoryIcon } from "@mui/icons-material";
 import { Spinner } from "./components/Spinner";
 import { HistoryLedger } from "./components/HistoryLedger";
-import { RestaurantManager } from "./components/RestaurantManager";
 
-type TabKey = "spinner" | "history" | "manage";
+type TabKey = "spinner" | "history";
 
 function App() {
   const [tab, setTab] = useState<TabKey>("spinner");
@@ -37,16 +36,14 @@ function App() {
           >
             <Tab value="spinner" icon={<RestaurantIcon />} iconPosition="start" label="Spinner" />
             <Tab value="history" icon={<HistoryIcon />} iconPosition="start" label="History" />
-            <Tab value="manage" icon={<SettingsIcon />} iconPosition="start" label="Manage" />
           </Tabs>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="md" sx={{ py: 3 }}>
+      <Container maxWidth="lg" sx={{ py: 3 }}>
         {tab === "spinner" && (
-          <Spinner onSavedToLedger={refreshHistory} onOpenHistory={() => setTab("history")} onOpenManage={() => setTab("manage")} />
+          <Spinner onSavedToLedger={refreshHistory} onOpenHistory={() => setTab("history")} />
         )}
         {tab === "history" && <HistoryLedger refreshKey={historyRefresh} />}
-        {tab === "manage" && <RestaurantManager open={true} onClose={() => setTab("spinner")} />}
       </Container>
     </>
   );

@@ -4,20 +4,37 @@ import {
   Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  IconButton,
+  List,
+  ListItem,
+  ListItemSecondaryAction,
+  ListItemText,
   Stack,
+  TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import { Delete, Edit } from "@mui/icons-material";
+import { scaleOrdinal, schemeTableau10 } from "d3";
 import type { Restaurant } from "../types";
-import { fetchSpinnerOptions } from "../api";
+import {
+  createRestaurant,
+  deleteRestaurant,
+  fetchRestaurants,
+  fetchSpinnerOptions,
+  updateRestaurant,
+} from "../api";
 import { SplitModal } from "./SplitModal";
-
-const LONG_LABEL_PREVIEW =
-  "Luigi's Trattoria & Wood-Fired Neapolitan Pizza Kitchen — Authentic Family Style, Reservations Welcome";
 
 type Props = {
   onSavedToLedger: () => void;
   onOpenHistory: () => void;
-  onOpenManage: () => void;
 };
 
 function easeOutCubic(t: number): number {
@@ -118,19 +135,31 @@ function drawLabelInWedge(
   paint(lines, midR, lineLeading);
 }
 
-export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props) {
+export function Spinner({ onSavedToLedger, onOpenHistory }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [options, setOptions] = useState<Restaurant[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [loadingList, setLoadingList] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [canvasSize, setCanvasSize] = useState(760);
   const rotationRef = useRef(0);
   const animRef = useRef<number | null>(null);
   const [winner, setWinner] = useState<Restaurant | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [cuisine, setCuisine] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loadOptions = useCallback(async () => {
+    setLoadingOptions(true);
     setError(null);
     try {
       const list = await fetchSpinnerOptions();
@@ -138,13 +167,49 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
-      setLoading(false);
+      setLoadingOptions(false);
     }
   }, []);
 
+  const loadRestaurants = useCallback(async () => {
+    setLoadingList(true);
+    setActionError(null);
+    try {
+      const list = await fetchRestaurants();
+      setRestaurants(list);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Unable to load restaurants");
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([loadOptions(), loadRestaurants()]);
+  }, [loadOptions, loadRestaurants]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadAll();
+  }, [loadAll]);
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return;
+
+    const clampSize = () => {
+      const style = window.getComputedStyle(node);
+      const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const width = Math.max(0, node.clientWidth - paddingX);
+      const height = Math.max(0, node.clientHeight - paddingY);
+      setCanvasSize(Math.max(360, Math.min(760, Math.min(width, height))));
+    };
+
+    clampSize();
+    const observer = new ResizeObserver(clampSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -153,7 +218,7 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const size = 600;
+    const size = canvasSize;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
     canvas.style.width = `${size}px`;
@@ -161,25 +226,15 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const cx = size / 2;
-    const cy = size / 2;
-    const outerMargin = Math.max(14, Math.round(size * 0.022));
+    const outerMargin = Math.max(18, Math.round(size * 0.024));
     const r = size / 2 - outerMargin;
     const n = Math.max(options.length, 1);
     const sector = (2 * Math.PI) / n;
-    const colors = [
-      "#1976d2",
-      "#9c27b0",
-      "#2e7d32",
-      "#ed6c02",
-      "#d32f2f",
-      "#0288d1",
-      "#5d4037",
-      "#455a64",
-    ];
+    const colorScale = scaleOrdinal(schemeTableau10).domain(options.map((restaurant) => restaurant.id.toString()));
 
     ctx.clearRect(0, 0, size, size);
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(cx, cx);
     ctx.rotate(rotationRef.current);
 
     for (let i = 0; i < n; i++) {
@@ -189,18 +244,18 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, r, start, end);
       ctx.closePath();
-      ctx.fillStyle = colors[i % colors.length] ?? "#999";
+      ctx.fillStyle = (colorScale(options[i]?.id.toString()) as string) ?? "#999";
       ctx.fill();
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 2;
       ctx.stroke();
 
       const labelAngle = start + sector / 2;
-      const name = options[i]?.name ?? `Slot ${i + 1}`;
+      const nameLabel = options[i]?.name ?? `Slot ${i + 1}`;
       ctx.save();
       ctx.rotate(labelAngle + Math.PI / 2);
       ctx.fillStyle = "#fff";
-      drawLabelInWedge(ctx, name, sector, r, size);
+      drawLabelInWedge(ctx, nameLabel, sector, r, size);
       ctx.restore();
     }
 
@@ -216,7 +271,7 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
     ctx.closePath();
     ctx.fillStyle = "#333";
     ctx.fill();
-  }, [options]);
+  }, [canvasSize, options]);
 
   useEffect(() => {
     draw();
@@ -232,6 +287,138 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
     if (animRef.current != null) cancelAnimationFrame(animRef.current);
     animRef.current = null;
   };
+
+  const handleSaveRestaurant = async () => {
+    if (!name.trim() || !cuisine.trim()) {
+      setActionError("Name and cuisine are required.");
+      return;
+    }
+
+    setSaving(true);
+    setActionError(null);
+
+    try {
+      if (editingId != null) {
+        await updateRestaurant(editingId, name.trim(), cuisine.trim());
+      } else {
+        await createRestaurant(name.trim(), cuisine.trim());
+      }
+      setName("");
+      setCuisine("");
+      setEditingId(null);
+      await loadAll();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Unable to save restaurant");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEdit = (restaurant: Restaurant) => {
+    setEditingId(restaurant.id);
+    setName(restaurant.name);
+    setCuisine(restaurant.cuisine);
+    setActionError(null);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this restaurant?")) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      await deleteRestaurant(id);
+      if (editingId === id) {
+        setEditingId(null);
+        setName("");
+        setCuisine("");
+      }
+      await loadAll();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Unable to delete restaurant");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setName("");
+    setCuisine("");
+    setActionError(null);
+  };
+
+  const handleOpenManager = () => setManagerOpen(true);
+  const handleCloseManager = () => setManagerOpen(false);
+
+  const renderManagementPanel = (
+    <Stack spacing={2} sx={{ width: "100%" }}>
+      <Typography variant="h6">Manage options</Typography>
+      <Typography variant="body2" color="text.secondary">
+        Add or edit restaurants here. The spinner uses the full live list.
+      </Typography>
+
+      <Stack spacing={1}>
+        <TextField
+          label="Restaurant name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          size="small"
+          fullWidth
+        />
+        <TextField
+          label="Cuisine"
+          value={cuisine}
+          onChange={(event) => setCuisine(event.target.value)}
+          size="small"
+          fullWidth
+        />
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleSaveRestaurant}
+            disabled={saving}
+            sx={{ flex: 1 }}
+          >
+            {editingId != null ? "Update" : "Add"}
+          </Button>
+          {editingId != null ? (
+            <Button variant="outlined" size="small" onClick={handleCancelEdit} disabled={saving}>
+              Cancel
+            </Button>
+          ) : null}
+        </Stack>
+      </Stack>
+
+      <Divider sx={{ my: 1 }} />
+
+      <Typography variant="subtitle2">Active options ({restaurants.length})</Typography>
+      <List dense disablePadding sx={{ maxHeight: 420, overflowY: "auto" }}>
+        {restaurants.map((restaurant) => (
+          <ListItem key={restaurant.id} divider>
+            <ListItemText
+              primary={restaurant.name}
+              secondary={restaurant.cuisine}
+              primaryTypographyProps={{ fontWeight: 700 }}
+            />
+            <ListItemSecondaryAction>
+              <IconButton edge="end" size="small" onClick={() => handleEdit(restaurant)}>
+                <Edit fontSize="small" />
+              </IconButton>
+              <IconButton
+                edge="end"
+                size="small"
+                color="error"
+                onClick={() => void handleDelete(restaurant.id)}
+              >
+                <Delete fontSize="small" />
+              </IconButton>
+            </ListItemSecondaryAction>
+          </ListItem>
+        ))}
+      </List>
+    </Stack>
+  );
 
   const spin = () => {
     if (spinning || options.length === 0) return;
@@ -274,92 +461,105 @@ export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props)
 
   useEffect(() => () => stopAnim(), []);
 
+  const isLoading = loadingOptions || loadingList;
+
   return (
-    <Stack spacing={2} alignItems="center" sx={{ width: "100%" }}>
+    <Stack spacing={2} sx={{ width: "100%" }}>
       <Box sx={{ textAlign: "center", width: "100%" }}>
         <Typography variant="h3" component="h1" sx={{ fontWeight: 700, letterSpacing: "-0.02em" }}>
           Lunch spinner
         </Typography>
         <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 0.5 }}>
-          Full venue names wrap in each slice — font stays 13px when it fits and scales down slightly if needed so nothing is clipped.
+          Spin from your live restaurant list and manage options directly on the same screen.
         </Typography>
       </Box>
-      {error && (
+
+      {(error || actionError) && (
         <Alert severity="error" sx={{ width: "100%" }}>
-          {error}
-          <Button onClick={() => void load()} size="small">
+          {error ?? actionError}
+          <Button onClick={() => void loadAll()} size="small" sx={{ ml: 1 }}>
             Retry
           </Button>
         </Alert>
       )}
-      {loading && (
+
+      {isLoading ? (
         <Box py={6}>
           <CircularProgress />
         </Box>
-      )}
-      {!loading && !error && (
-        <>
-          <Box position="relative" sx={{ bgcolor: "#fafafa", borderRadius: 2, p: 1 }}>
-            <canvas ref={canvasRef} />
+      ) : (
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="stretch">
+          <Box
+            ref={wrapperRef}
+            sx={{
+              flex: 2,
+              minWidth: 0,
+              width: "100%",
+              minHeight: 520,
+              height: { xs: "min(70vw, 520px)", md: "min(75vh, 760px)" },
+              bgcolor: "#fafafa",
+              borderRadius: 3,
+              p: 2,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              boxSizing: "border-box",
+              overflow: "hidden",
+            }}
+          >
+            <canvas ref={canvasRef} style={{ display: "block" }} />
           </Box>
-          {options.length > 0 && (
+
+          {isMobile ? (
+            <Box sx={{ width: "100%", display: "flex", justifyContent: "center" }}>
+              <Button variant="outlined" onClick={handleOpenManager}>
+                Manage options
+              </Button>
+              <Dialog open={managerOpen} onClose={handleCloseManager} fullWidth maxWidth="sm" fullScreen={isMobile}>
+                <DialogTitle>Manage restaurants</DialogTitle>
+                <DialogContent>{renderManagementPanel}</DialogContent>
+                <DialogActions>
+                  <Button onClick={handleCloseManager}>Close</Button>
+                </DialogActions>
+              </Dialog>
+            </Box>
+          ) : (
             <Box
               sx={{
+                flex: 1,
+                minWidth: 280,
+                maxWidth: 380,
                 width: "100%",
-                maxWidth: 560,
-                alignSelf: "center",
-                bgcolor: "action.hover",
-                p: 2,
-                borderRadius: 2,
-                borderLeft: 4,
-                borderColor: "primary.main",
-                borderStyle: "solid",
+                bgcolor: "background.paper",
+                borderRadius: 3,
+                p: 3,
+                boxShadow: 1,
+                boxSizing: "border-box",
               }}
             >
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                Long name preview — full text, same treatment as slices (wheel may shrink font to fit wedge)
-              </Typography>
-              <Typography
-                component="div"
-                sx={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  fontFamily: "sans-serif",
-                  lineHeight: 1.35,
-                  wordBreak: "break-word",
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {LONG_LABEL_PREVIEW}
-              </Typography>
+              {renderManagementPanel}
             </Box>
           )}
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={spin}
-              disabled={spinning || options.length === 0}
-            >
-              {spinning ? "Spinning…" : "Spin"}
-            </Button>
-            <Button variant="outlined" onClick={() => void load()} disabled={spinning}>
-              Reload options
-            </Button>
-            <Button variant="text" onClick={onOpenManage}>
-              Manage restaurants
-            </Button>
-            <Button variant="text" onClick={onOpenHistory}>
-              View ledger
-            </Button>
-          </Stack>
-          {options.length === 0 && (
-            <Typography variant="body2" color="text.secondary">
-              No restaurants in the database yet. Run backend seed and migrations.
-            </Typography>
-          )}
-        </>
+        </Stack>
       )}
+
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+        <Button variant="contained" size="large" onClick={spin} disabled={spinning || options.length === 0}>
+          {spinning ? "Spinning…" : "Spin"}
+        </Button>
+        <Button variant="outlined" onClick={() => void loadAll()} disabled={spinning}>
+          Reload options
+        </Button>
+        <Button variant="text" onClick={onOpenHistory}>
+          View ledger
+        </Button>
+        {isMobile ? (
+          <Button variant="outlined" onClick={handleOpenManager}>
+            Manage options
+          </Button>
+        ) : null}
+      </Stack>
+
       <SplitModal
         open={modalOpen}
         restaurant={winner}
