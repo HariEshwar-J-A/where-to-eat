@@ -118,7 +118,7 @@ function drawLabelInWedge(
   paint(lines, midR, lineLeading);
 }
 
-export function Spinner({ onSavedToLedger, onOpenHistory }: Props) {
+export function Spinner({ onSavedToLedger, onOpenHistory, onOpenManage }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [options, setOptions] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
